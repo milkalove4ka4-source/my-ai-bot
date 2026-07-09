@@ -66,3 +66,4 @@ if __name__ == "__main__":
     print("Бот успешно стартовал!")
     bot.remove_webhook()
     bot.infinity_polling()
+
