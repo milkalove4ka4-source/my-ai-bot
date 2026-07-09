@@ -1,24 +1,22 @@
 import os
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import telebot
 import requests
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
-# Твои данные (уже вставлены и проверены на пробелы)
-BOT_TOKEN = '8810352397:AAFHuC3cLzfPRYSxt99mo-A3yil89kqWoYk'
-OPENROUTER_API_KEY = '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'
+# Загружаем ключи из настроек Render
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Ответ на команду /start
 @bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "Привет! Я твой ИИ-бот. Задай мне любой вопрос, и я отвечу!")
+def start_message(message):
+    bot.reply_to(message, "Привет! Я твой обновленный ИИ-бот. Задай мне любой вопрос, и я отвечу!")
 
-# Отправка сообщений в нейросеть OpenRouter
 @bot.message_handler(func=lambda message: True)
-def ask_ai(message):
-    # Отправляем визуальный статус, что бот "печатает" ответ
+def handle_message(message):
+    # Показываем статус "печатает..."
     bot.send_chat_action(message.chat.id, 'typing')
     
     try:
@@ -29,7 +27,7 @@ def ask_ai(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta-llama/llama-3-8b-instruct:free", # Шустрая и бесплатная модель
+                "model": "meta-llama/llama-3-8b-instruct:free",  # 100% бесплатная и быстрая модель
                 "messages": [
                     {"role": "user", "content": message.text}
                 ]
@@ -45,25 +43,29 @@ def ask_ai(message):
     except Exception as e:
         bot.reply_to(message, "Произошла ошибка при попытке связаться с ИИ.")
 
-# Костыль для бесплатного Render (веб-сервер)
-class HealthCheckHandler(BaseHTTPRequestHandler):
+# === Костыль для бесплатного Render (веб-сервер) ===
+class WebServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
         self.end_headers()
-        self.wfile.write(b"Bot is running successfully!")
+        self.wfile.write(b"Bot is running!")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
 
-def run_health_check_server():
+def run_web_server():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server = HTTPServer(('0.0.0.0', port), WebServer)
     server.serve_forever()
 
 if __name__ == "__main__":
-    # Запуск сайта-заглушки для Render
-    threading.Thread(target=run_health_check_server, daemon=True).start()
+    # Запускаем веб-сервер в отдельном потоке
+    threading.Thread(target=run_web_server, daemon=True).start()
     
-    # Запуск бота
     print("Бот успешно стартовал!")
-    bot.remove_webhook()
+    
+    # Жесткий сброс всех зависших сессий Telegram, чтобы убрать ошибку 409
+    bot.remove_webhook(drop_pending_updates=True)
+    
+    # Запуск приема сообщений
     bot.infinity_polling()
-
