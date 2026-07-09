@@ -62,7 +62,5 @@ if __name__ == "__main__":
     
     print("Бот успешно стартовал!")
     
-    # Сбрасываем старые зависшие запросы, чтобы убрать ошибку 409
-    bot.remove_webhook(drop_pending_updates=True)
-    
-    bot.infinity_polling()
+    bot.remove_webhook()
+    bot.infinity_polling(skip_pending_updates=True)
