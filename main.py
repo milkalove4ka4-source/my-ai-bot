@@ -25,7 +25,7 @@ def handle_message(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta-llama/llama-3.1-8b-instruct:free",
+                "model": "google/gemma-2-9b-it:free",
                 "messages": [{"role": "user", "content": message.text}]
             }
         )
