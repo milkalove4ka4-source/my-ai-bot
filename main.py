@@ -64,4 +64,5 @@ if __name__ == "__main__":
     
     # Запуск бота
     print("Бот успешно стартовал!")
+    bot.remove_webhook()
     bot.infinity_polling()
