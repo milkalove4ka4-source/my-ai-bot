@@ -1,8 +1,9 @@
 import os
 import asyncio
 import requests
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from aiogram import Bot, Dispatcher, types
-from aiohttp import web
 
 BOT_TOKEN = '8810352397:AAFHuC3cLzfPRYSxt99mo-A3yil89kqWoYk'
 OPENROUTER_API_KEY = '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'
@@ -23,7 +24,6 @@ async def ai_handler(message: types.Message):
                 "Content-Type": "application/json"
             },
             json={
-                # Вставил самую свежую и 100% рабочую фри-модель
                 "model": "openchat/openchat-7b:free", 
                 "messages": [{"role": "user", "content": message.text}]
             }
@@ -33,31 +33,36 @@ async def ai_handler(message: types.Message):
             ai_text = response.json()['choices'][0]['message']['content']
             await message.answer(ai_text)
         else:
-            await message.answer(f"Ошибка ИИ (Код {response.status_code}). Напиши еще раз.")
+            await message.answer(f"Ошибка ИИ (Код {response.status_code}). Напиши еще раз чуть позже.")
             
     except Exception as e:
         await message.answer("Ошибка связи с сервером нейросети.")
 
-# Костыль-сервер для удержания деплоя на Render
-def init_app():
-    app = web.Application()
-    app.router.add_get('/', lambda r: web.Response(text="Бот онлайн!"))
-    return app
+# Легковесный синхронный сервер для обхода проверки портов Render
+class WebServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
 
-def main():
-    print("Бот успешно стартовал!")
+def run_web_server():
     port = int(os.environ.get("PORT", 10000))
-    runner = web.AppRunner(init_app())
-    
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(runner.setup())
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    loop.run_until_complete(site.start())
-    
-    # Сбрасываем все прошлые зависшие клики/сообщения
-    loop.run_until_complete(bot.delete_webhook(drop_pending_updates=True))
-    # Запускаем бесконечный процесс
-    loop.run_until_complete(dp.start_polling(bot))
+    server = HTTPServer(('0.0.0.0', port), WebServer)
+    server.serve_forever()
+
+async def main():
+    # Принудительно сбрасываем старые вебхуки и зависшие сообщения
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("Запуск бота...")
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    main()
+    # Запускаем веб-сервер в фоновом потоке (он займет порт мгновенно)
+    threading.Thread(target=run_web_server, daemon=True).start()
+    print("Веб-сервер запущен для прохождения проверок Render.")
+    
+    # Запускаем асинхронного бота в основном потоке
+    asyncio.run(main())
