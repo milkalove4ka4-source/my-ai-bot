@@ -27,7 +27,7 @@ def handle_message(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta-llama/llama-3-8b-instruct:free",  # 100% бесплатная модель
+                "model": "meta-llama/llama-3.1-8b-instruct:free",  # 100% бесплатная модель
                 "messages": [
                     {"role": "user", "content": message.text}
                 ]
