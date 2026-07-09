@@ -29,7 +29,7 @@ def ask_ai(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "google/gemini-2.5-flash", # Шустрая и бесплатная модель
+                "model": "meta-llama/llama-3-8b-instruct:free", # Шустрая и бесплатная модель
                 "messages": [
                     {"role": "user", "content": message.text}
                 ]
