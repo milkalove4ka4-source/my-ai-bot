@@ -1,22 +1,18 @@
 import os
 import telebot
 import requests
-from flask import Flask, request
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
-# Твои ключи
 BOT_TOKEN = '8810352397:AAFHuC3cLzfPRYSxt99mo-A3yil89kqWoYk'
 OPENROUTER_API_KEY = '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'
 
-# Имя твоего приложения на Render (взято из твоих логов)
-RENDER_APP_NAME = 'my-ai-bot-5gyc'
-WEBHOOK_URL = f"https://{RENDER_APP_NAME}.onrender.com/{BOT_TOKEN}"
-
-bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-app = Flask(__name__)
+bot = telebot.TeleBot(BOT_TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
-    bot.reply_to(message, "Привет! Я твой обновленный ИИ-бот. Задай мне любой вопрос, и я отвечу!")
+    bot.reply_to(message, "Привет! Я наконец-то работаю. Задавай вопрос!")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -37,30 +33,32 @@ def handle_message(message):
             ai_text = response.json()['choices'][0]['message']['content']
             bot.reply_to(message, ai_text)
         else:
-            bot.reply_to(message, f"Ошибка нейросети (Код {response.status_code}).")
+            bot.reply_to(message, f"Ошибка нейросети: {response.status_code}")
     except Exception as e:
-        bot.reply_to(message, "Произошла ошибка при попытке связаться с ИИ.")
+        bot.reply_to(message, "Ошибка связи с ИИ.")
 
-# Обработчик запросов от Telegram
-@app.route(f'/{BOT_TOKEN}', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return '', 200
-    else:
-        return 'Invalid request', 403
+# Простой веб-сервер, чтобы Render не закрывал приложение
+class WebServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
 
-@app.route('/')
-def index():
-    return "Bot is running via Webhook!", 200
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), WebServer)
+    server.serve_forever()
 
 if __name__ == "__main__":
-    print("Установка вебхука в Telegram...")
-    bot.remove_webhook()
-    # Принудительно очищаем очередь обновлений и ставим вебхук
-    bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+    threading.Thread(target=run_web_server, daemon=True).start()
+    print("Бот запущен. Начинаем пробивать ошибку 409...")
     
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    # Пытаемся запустить бота по кругу. Если старый процесс мешает (409), 
+    # код не падает, а просто ждет 5 секунд и пробует снова, пока старый процесс не сдохнет.
+    while True:
+        try:
+            bot.remove_webhook()
+            bot.polling(none_stop=True, interval=1, timeout=20)
+        except Exception as e:
+            print(f"Зависло старое соединение (ошибка 409). Повтор через 5 сек...")
+            time.sleep(5)
