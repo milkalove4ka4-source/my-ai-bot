@@ -27,7 +27,7 @@ def handle_message(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta-llama/llama-3.1-8b-instruct:free",  # 100% бесплатная модель
+                "model": "meta-llama/llama-3.1-8b-instruct:free",  # Актуальная и быстрая бесплатная модель
                 "messages": [
                     {"role": "user", "content": message.text}
                 ]
@@ -60,13 +60,18 @@ def run_web_server():
 
 # === Главный запуск программы ===
 if __name__ == "__main__":
-    # Запускаем веб-сервер, чтобы Render не ругался
+    # Запускаем веб-сервер в отдельном потоке
     threading.Thread(target=run_web_server, daemon=True).start()
     
     print("Бот успешно стартовал!")
     
-    # Сбрасываем старые вебхуки, если они зависли
-    bot.remove_webhook()
+    try:
+        # 1. Удаляем вебхуки, если они были установлены
+        bot.remove_webhook()
+        # 2. Принудительно очищаем очередь зависших запросов, убирая ошибку 409
+        bot.get_updates(offset=-1)
+    except Exception as e:
+        print(f"Предупреждение при очистке очереди: {e}")
     
-    # Самый стабильный и классический бесконечный запуск бота
+    # Запуск бесконечного опроса бота
     bot.polling(none_stop=True)
