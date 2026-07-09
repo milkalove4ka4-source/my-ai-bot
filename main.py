@@ -1,14 +1,18 @@
 import os
 import telebot
 import requests
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
+from flask import Flask, request
 
-# Твои ключи вшиты прямо в код
+# Твои ключи
 BOT_TOKEN = '8810352397:AAFHuC3cLzfPRYSxt99mo-A3yil89kqWoYk'
 OPENROUTER_API_KEY = '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'
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# Имя твоего приложения на Render (взято из твоих логов)
+RENDER_APP_NAME = 'my-ai-bot-5gyc'
+WEBHOOK_URL = f"https://{RENDER_APP_NAME}.onrender.com/{BOT_TOKEN}"
+
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
+app = Flask(__name__)
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
@@ -16,9 +20,7 @@ def start_message(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    # Показываем статус "печатает..." в чате
     bot.send_chat_action(message.chat.id, 'typing')
-    
     try:
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
@@ -27,51 +29,38 @@ def handle_message(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta-llama/llama-3.1-8b-instruct:free",  # Актуальная и быстрая бесплатная модель
-                "messages": [
-                    {"role": "user", "content": message.text}
-                ]
+                "model": "meta-llama/llama-3.1-8b-instruct:free",
+                "messages": [{"role": "user", "content": message.text}]
             }
         )
-        
         if response.status_code == 200:
             ai_text = response.json()['choices'][0]['message']['content']
             bot.reply_to(message, ai_text)
         else:
-            bot.reply_to(message, f"Ошибка нейросети (Код {response.status_code}). Попробуй позже.")
-            
+            bot.reply_to(message, f"Ошибка нейросети (Код {response.status_code}).")
     except Exception as e:
         bot.reply_to(message, "Произошла ошибка при попытке связаться с ИИ.")
 
-# === Веб-сервер для бесплатного тарифа Render ===
-class WebServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
+# Обработчик запросов от Telegram
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return 'Invalid request', 403
 
-def run_web_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), WebServer)
-    server.serve_forever()
+@app.route('/')
+def index():
+    return "Bot is running via Webhook!", 200
 
-# === Главный запуск программы ===
 if __name__ == "__main__":
-    # Запускаем веб-сервер в отдельном потоке
-    threading.Thread(target=run_web_server, daemon=True).start()
+    print("Установка вебхука в Telegram...")
+    bot.remove_webhook()
+    # Принудительно очищаем очередь обновлений и ставим вебхук
+    bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
     
-    print("Бот успешно стартовал!")
-    
-    try:
-        # 1. Удаляем вебхуки, если они были установлены
-        bot.remove_webhook()
-        # 2. Принудительно очищаем очередь зависших запросов, убирая ошибку 409
-        bot.get_updates(offset=-1)
-    except Exception as e:
-        print(f"Предупреждение при очистке очереди: {e}")
-    
-    # Запуск бесконечного опроса бота
-    bot.polling(none_stop=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
