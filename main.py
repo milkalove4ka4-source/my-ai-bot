@@ -4,9 +4,9 @@ import requests
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 
-# Загружаем ключи из настроек Render
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
+# Твои ключи вшиты прямо в код (теперь Render их точно увидит!)
+BOT_TOKEN = '8810352397:AAFHuC3cLzfPRYSxt99mo-A3yil89kqWoYk'
+OPENROUTER_API_KEY = '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'
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -16,7 +16,6 @@ def start_message(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    # Показываем статус "печатает..."
     bot.send_chat_action(message.chat.id, 'typing')
     
     try:
@@ -27,7 +26,7 @@ def handle_message(message):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta-llama/llama-3-8b-instruct:free",  # 100% бесплатная и быстрая модель
+                "model": "meta-llama/llama-3-8b-instruct:free",  # Полностью бесплатная модель
                 "messages": [
                     {"role": "user", "content": message.text}
                 ]
@@ -43,7 +42,7 @@ def handle_message(message):
     except Exception as e:
         bot.reply_to(message, "Произошла ошибка при попытке связаться с ИИ.")
 
-# === Костыль для бесплатного Render (веб-сервер) ===
+# === Веб-сервер для Render ===
 class WebServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -59,13 +58,11 @@ def run_web_server():
     server.serve_forever()
 
 if __name__ == "__main__":
-    # Запускаем веб-сервер в отдельном потоке
     threading.Thread(target=run_web_server, daemon=True).start()
     
     print("Бот успешно стартовал!")
     
-    # Жесткий сброс всех зависших сессий Telegram, чтобы убрать ошибку 409
+    # Сбрасываем старые зависшие запросы, чтобы убрать ошибку 409
     bot.remove_webhook(drop_pending_updates=True)
     
-    # Запуск приема сообщений
     bot.infinity_polling()
